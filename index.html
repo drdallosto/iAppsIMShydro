@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>H08S Spectrogram — Real Data</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+  padding: 12px;
+}
+h1 { font-size: 1rem; color: #58a6ff; margin-bottom: 2px; }
+.subtitle { font-size: 0.7rem; color: #8b949e; margin-bottom: 8px; }
+
+.status-bar {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  color: #8b949e;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #f0883e; flex-shrink: 0; }
+.dot.pulse { animation: pulse 1.2s infinite; }
+.dot.green { background: #3fb950; animation: none; }
+.dot.red { background: #f85149; animation: none; }
+.dot.yellow { background: #d29922; animation: none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+.badge {
+  font-size: 0.62rem;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.badge.real { border-color: #3fb950; color: #3fb950; background: rgba(63,185,80,.1); }
+.badge.sim  { border-color: #f85149; color: #f85149; background: rgba(248,81,73,.1); }
+.badge.fetching { border-color: #58a6ff; color: #58a6ff; background: rgba(88,166,255,.1); }
+
+.sta-tabs { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
+.sta-tab {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #8b949e;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.sta-tab.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
+.sta-tab .sub { font-size: 0.6rem; display: block; color: #6e7681; }
+.sta-tab.active .sub { color: #79c0ff; }
+
+.controls {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 9px;
+  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.cg label { display:block; font-size:0.65rem; color:#8b949e; margin-bottom:3px; text-transform:uppercase; letter-spacing:.04em; }
+select, input[type=range] {
+  width: 100%;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #e6edf3;
+  padding: 4px 7px;
+  font-size: 0.76rem;
+}
+input[type=range] { padding:0; cursor:pointer; accent-color:#58a6ff; }
+.rv { font-size:0.65rem; color:#58a6ff; text-align:right; margin-top:1px; }
+
+.btn-row { display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap; }
+button {
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6edf3;
+  padding: 6px 12px;
+  font-size: 0.74rem;
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+button:hover { background: #30363d; }
+button.primary { background: #1f6feb; border-color: #1f6feb; }
+button.primary:hover { background: #388bfd; }
+button.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.proxy-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.section-lbl { font-size:0.65rem; color:#8b949e; text-transform:uppercase; letter-spacing:.05em; margin-bottom:5px; }
+.proxy-btn {
+  font-size: 0.7rem;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #8b949e;
+  cursor: pointer;
+}
+.proxy-btn.active { background: #0d419d; border-color: #58a6ff; color: #58a6ff; }
+
+.spec-row { display:flex; gap:0; }
+.yax { width:38px; flex-shrink:0; }
+.main-wrap {
+  flex:1; position:relative; background:#010409;
+  border:1px solid #30363d; border-radius:0 8px 8px 0;
+  overflow:hidden; cursor:crosshair; touch-action:none;
+}
+canvas { display:block; width:100%; }
+#yaxCanvas { display:block; background:#0d1117; border:1px solid #30363d; border-right:none; border-radius:8px 0 0 8px; }
+#tooltip {
+  position:absolute; background:rgba(13,17,23,.95); border:1px solid #58a6ff;
+  border-radius:4px; padding:5px 8px; font-size:0.67rem; pointer-events:none;
+  display:none; z-index:10; white-space:nowrap; line-height:1.5;
+}
+#zoomRect {
+  position:absolute; border:1px dashed #58a6ff; background:rgba(88,166,255,.07);
+  pointer-events:none; display:none;
+}
+.xax-wrap { margin-left:38px; margin-bottom:7px; }
+#xaxCanvas { display:block; width:100%; height:18px; background:#0d1117; }
+
+.cbar-wrap { display:flex; align-items:center; gap:7px; margin-bottom:8px; font-size:0.67rem; color:#8b949e; margin-left:38px; }
+#cbar { height:12px; flex:1; border-radius:3px; border:1px solid #30363d; }
+
+/* Waveform panel */
+.wave-section { margin-bottom: 8px; }
+.wave-row { display:flex; gap:0; }
+#waveYax { width:38px; flex-shrink:0; background:#0d1117; border:1px solid #30363d; border-right:none; border-radius:8px 0 0 8px; }
+.wave-main { flex:1; background:#010409; border:1px solid #30363d; border-radius:0 8px 8px 0; overflow:hidden; }
+#waveCanvas { display:block; width:100%; height:80px; }
+
+#fetchLog {
+  background: #010409;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 0.65rem;
+  color: #8b949e;
+  font-family: monospace;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+#fetchLog .ok { color: #3fb950; }
+#fetchLog .err { color: #f85149; }
+#fetchLog .info { color: #58a6ff; }
+#fetchLog .warn { color: #d29922; }
+
+.raw-section {
+  background: #010409;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 0.65rem;
+  color: #8b949e;
+  font-family: monospace;
+  margin-bottom: 8px;
+}
+.raw-section .lbl { color: #58a6ff; margin-bottom: 4px; font-size: 0.67rem; }
+</style>
+</head>
+<body>
+
+<h1>🌊 H08S · H10N · H11N — Hydroacoustic Spectrogram</h1>
+<p class="subtitle">IMS Network · EarthScope FDSN · Real Data Mode</p>
+
+<div class="status-bar" id="statusBar">
+  <div class="dot yellow" id="sDot"></div>
+  <span id="sTxt">Ready — press Fetch & Render</span>
+  <span class="badge sim" id="dataBadge">NO DATA</span>
+</div>
+
+<div id="fetchLog"><span class="info">▶ Ready. MiniSEED parser v2 — fixed header offsets.</span></div>
+
+<!-- Raw header dump -->
+<div class="raw-section" id="rawDump" style="display:none">
+  <div class="lbl">📋 MiniSEED Header Dump (first record)</div>
+  <div id="rawDumpContent"></div>
+</div>
+
+<!-- Station selector -->
+<div class="section-lbl">Station</div>
+<div class="sta-tabs" id="staTabs">
+  <div class="sta-tab active" onclick="selectStation('H08S1')" id="tab_H08S1">H08S1 <span class="sub">Diego Garcia S1</span></div>
+  <div class="sta-tab" onclick="selectStation('H08S2')" id="tab_H08S2">H08S2 <span class="sub">Diego Garcia S2</span></div>
+  <div class="sta-tab" onclick="selectStation('H10N1')" id="tab_H10N1">H10N1 <span class="sub">Ascension Is.</span></div>
+  <div class="sta-tab" onclick="selectStation('H10N2')" id="tab_H10N2">H10N2 <span class="sub">Ascension Is.</span></div>
+  <div class="sta-tab" onclick="selectStation('H11N1')" id="tab_H11N1">H11N1 <span class="sub">Wake Island</span></div>
+  <div class="sta-tab" onclick="selectStation('H11N2')" id="tab_H11N2">H11N2 <span class="sub">Wake Island</span></div>
+</div>
+
+<!-- Time window -->
+<div class="controls">
+  <div class="cg">
+    <label>Start (UTC)</label>
+    <input type="datetime-local" id="startTime" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#e6edf3;padding:4px 7px;font-size:0.76rem;">
+  </div>
+  <div class="cg">
+    <label>End (UTC)</label>
+    <input type="datetime-local" id="endTime" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:4px;color:#e6edf3;padding:4px 7px;font-size:0.76rem;">
+  </div>
+  <div class="cg">
+    <label>Color Map</label>
+    <select id="cmapSel">
+      <option value="viridis">Viridis</option>
+      <option value="plasma">Plasma</option>
+      <option value="inferno">Inferno</option>
+      <option value="jet">Jet</option>
+      <option value="gray">Grayscale</option>
+    </select>
+  </div>
+  <div class="cg">
+    <label>Freq Max (Hz)</label>
+    <select id="freqMax">
+      <option value="5">0 – 5 Hz</option>
+      <option value="10">0 – 10 Hz</option>
+      <option value="25">0 – 25 Hz</option>
+      <option value="50">0 – 50 Hz</option>
+      <option value="125" selected>0 – 125 Hz (full)</option>
+    </select>
+  </div>
+  <div class="cg">
+    <label>dB Min</label>
+    <input type="range" id="dbMin" min="-120" max="0" value="-80">
+    <div class="rv" id="dbMinV">-80 dB</div>
+  </div>
+  <div class="cg">
+    <label>dB Max</label>
+    <input type="range" id="dbMax" min="-60" max="60" value="0">
+    <div class="rv" id="dbMaxV">0 dB</div>
+  </div>
+</div>
+
+<!-- Proxy selector -->
+<div class="section-lbl">CORS Proxy</div>
+<div class="proxy-row" id="proxyRow">
+  <button class="proxy-btn active" onclick="setProxy('direct')" id="px_direct">🌐 Direct</button>
+  <button class="proxy-btn" onclick="setProxy('corsproxy')" id="px_corsproxy">🔀 corsproxy.io</button>
+  <button class="proxy-btn" onclick="setProxy('allorigins')" id="px_allorigins">🔀 allorigins</button>
+</div>
+
+<!-- Action buttons -->
+<div class="btn-row">
+  <button class="primary" onclick="fetchAndRender()">⬇ Fetch & Render</button>
+  <button onclick="toggleZoom()" id="zoomBtn">🔍 Box Zoom</button>
+  <button onclick="resetView()">↺ Reset View</button>
+  <button onclick="toggleWaveform()" id="waveBtn">〜 Waveform</button>
+  <button onclick="dumpRawHeader()" id="dumpBtn" disabled>🔬 Dump Header</button>
+</div>
+
+<!-- Colorbar -->
+<div class="cbar-wrap">
+  <span id="cbarMin">-80 dB</span>
+  <canvas id="cbar" width="300" height="12"></canvas>
+  <span id="cbarMax">0 dB</span>
+</div>
+
+<!-- Spectrogram -->
+<div class="spec-row">
+  <canvas id="yaxCanvas" class="yax" width="38" height="300"></canvas>
+  <div class="main-wrap" id="mainWrap">
+    <canvas id="specCanvas" width="800" height="300"></canvas>
+    <div id="tooltip"></div>
+    <div id="zoomRect"></div>
+  </div>
+</div>
+<div class="xax-wrap">
+  <canvas id="xaxCanvas" height="18"></canvas>
+</div>
+
+<!-- Waveform -->
+<div class="wave-section" id="waveSection" style="display:none">
+  <div class="section-lbl">Raw Waveform</div>
+  <div class="wave-row">
+    <canvas id="waveYax" width="38" height="80"></canvas>
+    <div class="wave-main">
+      <canvas id="waveCanvas" width="800" height="80"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let currentStation = 'H08S1';
+let currentProxy = 'direct';
+let zoomMode = false;
+let showWaveform = false;
+let rawBytes = null;
+let allSamples = [];
+let sampleRate = 250;
+let startEpoch = 0;
+let viewStart = 0, viewEnd = 1;
+let zoomStart = null;
+let specImageData = null;
+
+const STATION_MAP = {
+  H08S1: { net:'IM', sta:'H08S1', loc:'', cha:'EDH' },
+  H08S2: { net:'IM', sta:'H08S2', loc:'', cha:'EDH' },
+  H10N1: { net:'IM', sta:'H10N1', loc:'', cha:'EDH' },
+  H10N2: { net:'IM', sta:'H10N2', loc:'', cha:'EDH' },
+  H11N1: { net:'IM', sta:'H11N1', loc:'', cha:'EDH' },
+  H11N2: { net:'IM', sta:'H11N2', loc:'', cha:'EDH' },
+};
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  // Default: 5-minute snippet from May 22, 2025
+  document.getElementById('startTime').value = '2025-05-22T00:00';
+  document.getElementById('endTime').value   = '2025-05-22T00:05';
+
+  document.getElementById('dbMin').oninput = e => {
+    document.getElementById('dbMinV').textContent = e.target.value + ' dB';
+    if (allSamples.length) renderSpectrogram();
+  };
+  document.getElementById('dbMax').oninput = e => {
+    document.getElementById('dbMaxV').textContent = e.target.value + ' dB';
+    if (allSamples.length) renderSpectrogram();
+  };
+
+  setupZoomInteraction();
+  drawColorbar();
+};
+
+// ─── Station / Proxy ─────────────────────────────────────────────────────────
+function selectStation(s) {
+  currentStation = s;
+  document.querySelectorAll('.sta-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab_' + s).classList.add('active');
+}
+
+function setProxy(p) {
+  currentProxy = p;
+  document.querySelectorAll('.proxy-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('px_' + p).classList.add('active');
+}
+
+// ─── Logging ─────────────────────────────────────────────────────────────────
+function log(msg, cls='') {
+  const el = document.getElementById('fetchLog');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = '[' + new Date().toTimeString().slice(0,8) + '] ' + msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ─── Build URL ───────────────────────────────────────────────────────────────
+function buildUrl(net, sta, loc, cha, start, end) {
+  const base = 'https://service.earthscope.org/fdsnws/dataselect/1/query';
+  const params = `network=${net}&station=${sta}&location=${loc||'--'}&channel=${cha}&starttime=${start}&endtime=${end}&format=miniseed`;
+  return `${base}?${params}`;
+}
+
+function applyProxy(url) {
+  if (currentProxy === 'corsproxy') return `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  if (currentProxy === 'allorigins') return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  return url;
+}
+
+// ─── Fetch ───────────────────────────────────────────────────────────────────
+async function fetchAndRender() {
+  const st = document.getElementById('startTime').value.replace('T','T') + ':00Z';
+  const et = document.getElementById('endTime').value.replace('T','T') + ':00Z';
+  const info = STATION_MAP[currentStation];
+
+  setStatus('Fetching...', 'pulse', 'fetching');
+  log('─────────────────────────────', 'info');
+  log(`Station: ${info.net}.${info.sta}..${info.cha}`, 'info');
+  log(`Window: ${st} → ${et}`, 'info');
+
+  // Try channel variants
+  const channels = ['EDH', 'BDF', 'BDH', 'EDF', 'HDF'];
+  let data = null;
+  let usedCha = null;
+
+  for (const cha of channels) {
+    const url = buildUrl(info.net, info.sta, info.loc, cha, st, et);
+    const proxied = applyProxy(url);
+    log(`Trying ${cha} via ${currentProxy}...`);
+    log(`URL: ${proxied.slice(0,80)}...`, 'info');
+
+    try {
+      const resp = await fetch(proxied);
+      log(`HTTP ${resp.status} for ${cha}`);
+      if (resp.ok) {
+        const buf = await resp.arrayBuffer();
+        log(`Received ${buf.byteLength} bytes for ${cha}`, 'ok');
+        if (buf.byteLength > 256) {
+          data = buf;
+          usedCha = cha;
+          break;
+        } else {
+          log(`Too small (${buf.byteLength} bytes), skipping`, 'warn');
+        }
+      } else if (resp.status === 404) {
+        log(`No data for ${cha}`, 'warn');
+      } else if (resp.status === 401 || resp.status === 403) {
+        log(`Auth required for ${cha} — try different proxy`, 'err');
+      }
+    } catch(e) {
+      log(`Fetch error for ${cha}: ${e.message}`, 'err');
+    }
+  }
+
+  if (!data) {
+    setStatus('Fetch failed — check log', 'red', 'sim');
+    log('All channels failed. Check proxy or time window.', 'err');
+    return;
+  }
+
+  rawBytes = data;
+  document.getElementById('dumpBtn').disabled = false;
+
+  // Parse MiniSEED
+  log('Parsing MiniSEED...', 'info');
+  const result = parseMiniSEED(data);
+
+  if (result.samples.length === 0) {
+    setStatus('Parse failed — see header dump', 'red', 'sim');
+    log('0 samples decoded. Press 🔬 Dump Header to inspect raw bytes.', 'err');
+    return;
+  }
+
+  allSamples = result.samples;
+  sampleRate = result.sampleRate;
+  startEpoch = result.startEpoch;
+  viewStart = 0;
+  viewEnd = 1;
+
+  log(`✓ Decoded ${allSamples.length} samples @ ${sampleRate} Hz`, 'ok');
+  log(`Start: ${new Date(startEpoch).toISOString()}`, 'ok');
+  log(`Duration: ${(allSamples.length / sampleRate).toFixed(1)} s`, 'ok');
+
+  setStatus(`${currentStation} · ${usedCha} · ${allSamples.length} samples`, 'green', 'real');
+  renderSpectrogram();
+  if (showWaveform) renderWaveform();
+};
+
+// ─── MiniSEED Parser v2 ───────────────────────────────────────────────────────
+// Correct SEED fixed header offsets (SEED v2.4 manual)
+// Offset 0:  6 bytes  sequence number (ASCII)
+// Offset 6:  1 byte   data quality
+// Offset 7:  1 byte   reserved
+// Offset 8:  5 bytes  station (ASCII, space padded)
+// Offset 13: 2 bytes  location (ASCII)
+// Offset 15: 3 bytes  channel (ASCII)
+// Offset 18: 2 bytes  network (ASCII)
+// Offset 20: 10 bytes start time (BTIME structure)
+// Offset 30: 2 bytes  number of samples (uint16 BE)
+// Offset 32: 2 bytes  sample rate factor (int16 BE)
+// Offset 34: 2 bytes  sample rate multiplier (int16 BE)
+// Offset 36: 1 byte   activity flags
+// Offset 37: 1 byte   I/O flags
+// Offset 38: 1 byte   data quality flags
+// Offset 39: 1 byte   number of blockettes (uint8)
+// Offset 40: 4 bytes  time correction (int32 BE)
+// Offset 44: 2 bytes  data offset (uint16 BE)
+// Offset 46: 2 bytes  first blockette offset (uint16 BE)
+
+function parseMiniSEED(buf) {
+  const view = new DataView(buf);
+  const bytes = new Uint8Array(buf);
+  let offset = 0;
+  let allSamples = [];
+  let firstSR = 250;
+  let firstEpoch = 0;
+  let recCount = 0;
+
+  // Auto-detect record length by scanning for sequence numbers
+  // Try common record lengths: 512, 4096
+  let recLen = detectRecordLength(bytes);
+  log(`Detected record length: ${recLen} bytes`, 'info');
+
+  while (offset + recLen <= buf.byteLength) {
+    try {
+      // Verify this looks like a valid record (sequence number = 6 ASCII digits)
+      let seqOk = true;
+      for (let i = 0; i < 6; i++) {
+        const c = bytes[offset + i];
+        if (c < 0x30 || c > 0x39) { seqOk = false; break; }
+      }
+      if (!seqOk) { offset += recLen; continue; }
+
+      const seq = readASCII(bytes, offset, 6);
+      const sta = readASCII(bytes, offset + 8, 5).trim();
+      const loc = readASCII(bytes, offset + 13, 2).trim();
+      const cha = readASCII(bytes, offset + 15, 3).trim();
+      const net = readASCII(bytes, offset + 18, 2).trim();
+
+      // BTIME at offset 20: year(2), doy(2), hour(1), min(1), sec(1), unused(1), frac(2) — all BE
+      const year  = view.getUint16(offset + 20, false);
+      const doy   = view.getUint16(offset + 22, false);
+      const hour  = bytes[offset + 24];
+      const min   = bytes[offset + 25];
+      const sec   = bytes[offset + 26];
+      const frac  = view.getUint16(offset + 28, false); // 0.0001 s units
+
+      const epoch = btimeToEpoch(year, doy, hour, min, sec, frac);
+
+      const nSamp  = view.getUint16(offset + 30, false);
+      const srFact = view.getInt16(offset + 32, false);
+      const srMult = view.getInt16(offset + 34, false);
+      const sr     = calcSampleRate(srFact, srMult);
+
+      const nBlk   = bytes[offset + 39];
+      const dataOff = view.getUint16(offset + 44, false);
+      const blk1Off = view.getUint16(offset + 46, false);
+
+      if (recCount < 3) {
+        log(`Rec ${recCount+1}: ${net}.${sta}.${loc}.${cha} | ${new Date(epoch).toISOString()} | SR=${sr} | nSamp=${nSamp} | dataOff=${dataOff} | blk1Off=${blk1Off}`, 'info');
+      }
+
+      // Read encoding from blockette 1000
+      let encoding = 11; // default Steim-2
+      let blkOffset = blk1Off > 0 ? offset + blk1Off : -1;
+      let blkSafety = 0;
+      while (blkOffset > 0 && blkSafety++ < 10) {
+        if (blkOffset + 8 > offset + recLen) break;
+        const blkType = view.getUint16(blkOffset, false);
+        const nextBlk = view.getUint16(blkOffset + 2, false);
+        if (blkType === 1000) {
+          encoding = bytes[blkOffset + 4];
+          const wordOrder = bytes[blkOffset + 5];
+          const recLenExp = bytes[blkOffset + 6];
+          if (recCount < 3) log(`  Blockette 1000: enc=${encoding} wordOrder=${wordOrder} recLenExp=${recLenExp} → recLen=${1<<recLenExp}`, 'ok');
+          // Update recLen from blockette if available
+          if (recLenExp >= 8 && recLenExp <= 14) recLen = 1 << recLenExp;
+          break;
+        }
+        if (nextBlk === 0 || nextBlk <= blk1Off) break;
+        blkOffset = offset + nextBlk;
+      }
+
+      // Decode samples
+      if (nSamp > 0 && dataOff > 0 && dataOff < recLen) {
+        const dOff = offset + dataOff;
+        const dLen = recLen - dataOff;
+        const samples = decodeSamples(view, bytes, dOff, dLen, nSamp, encoding);
+
+        if (recCount === 0) {
+          firstSR = sr;
+          firstEpoch = epoch;
+        }
+        allSamples.push(...samples);
+      }
+
+      recCount++;
+    } catch(e) {
+      log(`Parse error at offset ${offset}: ${e.message}`, 'warn');
+    }
+    offset += recLen;
+  }
+
+  log(`Parsed ${recCount} records, ${allSamples.length} samples`, 'info');
+  return { samples: allSamples, sampleRate: firstSR, startEpoch: firstEpoch };
+}
+
+function detectRecordLength(bytes) {
+  // Scan for next sequence number at 512 or 4096 boundary
+  for (const len of [512, 4096, 256, 1024, 2048]) {
+    if (bytes.length < len * 2) continue;
+    let ok = true;
+    for (let i = 0; i < 6; i++) {
+      const c = bytes[len + i];
+      if (c < 0x30 || c > 0x39) { ok = false; break; }
+    }
+    if (ok) return len;
+  }
+  return 512; // fallback
+}
+
+function readASCII(bytes, offset, len) {
+  let s = '';
+  for (let i = 0; i < len; i++) s += String.fromCharCode(bytes[offset + i]);
+  return s;
+}
+
+function btimeToEpoch(year, doy, hour, min, sec, frac) {
+  // Convert day-of-year to month/day
+  const d = new Date(Date.UTC(year, 0, 1));
+  d.setUTCDate(d.getUTCDate() + doy - 1);
+  d.setUTCHours(hour, min, sec, Math.round(frac / 10));
+  return d.getTime();
+}
+
+function calcSampleRate(factor, multiplier) {
+  if (factor === 0 || multiplier === 0) return 1;
+  let sr;
+  if (factor > 0 && multiplier > 0) sr = factor * multiplier;
+  else if (factor > 0 && multiplier < 0) sr = -factor / multiplier;
+  else if (factor < 0 && multiplier > 0) sr = -multiplier / factor;
+  else sr = 1 / (factor * multiplier);
+  return Math.abs(sr);
+}
+
+function decodeSamples(view, bytes, offset, dataLen, nSamp, encoding) {
+  try {
+    switch (encoding) {
+      case 1:  return decodeInt16(view, offset, nSamp);
+      case 3:  return decodeInt32(view, offset, nSamp);
+      case 4:  return decodeFloat32(view, offset, nSamp);
+      case 5:  return decodeFloat64(view, offset, nSamp);
+      case 10: return decodeSteim1(view, offset, dataLen, nSamp);
+      case 11: return decodeSteim2(view, offset, dataLen, nSamp);
+      default:
+        log(`Unknown encoding ${encoding} — trying Steim-2`, 'warn');
+        return decodeSteim2(view, offset, dataLen, nSamp);
+    }
+  } catch(e) {
+    log(`Decode error enc=${encoding}: ${e.message}`, 'err');
+    return [];
+  }
+}
+
+function decodeInt16(view, offset, n) {
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = view.getInt16(offset + i*2, false);
+  return out;
+}
+
+function decodeInt32(view, offset, n) {
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = view.getInt32(offset + i*4, false);
+  return out;
+}
+
+function decodeFloat32(view, offset, n) {
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = view.getFloat32(offset + i*4, false);
+  return out;
+}
+
+function decodeFloat64(view, offset, n) {
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = view.getFloat64(offset + i*8, false);
+  return out;
+}
+
+function decodeSteim1(view, offset, dataLen, nSamp) {
+  const samples = [];
+  const nFrames = Math.floor(dataLen / 64);
+  let x0 = 0, last = 0;
+  let first = true;
+
+  for (let f = 0; f < nFrames && samples.length < nSamp; f++) {
+    const fOff = offset + f * 64;
+    const ctrl = view.getUint32(fOff, false);
+
+    for (let w = 1; w < 16 && samples.length < nSamp; w++) {
+      const code = (ctrl >>> (30 - w*2)) & 0x3;
+      const wOff = fOff + w * 4;
+      const word = view.getInt32(wOff, false);
+
+      if (f === 0 && w === 1) { x0 = word; last = x0; if(first){samples.push(x0);first=false;} continue; }
+      if (f === 0 && w === 2) continue; // xn
+
+      switch (code) {
+        case 0: break; // special
+        case 1: // 4 x 8-bit
+          for (let i = 3; i >= 0 && samples.length < nSamp; i--) {
+            const d = (word >> (i*8)) & 0xFF;
+            last += (d > 127 ? d - 256 : d);
+            samples.push(last);
+          }
+          break;
+        case 2: // 2 x 16-bit
+          for (let i = 1; i >= 0 && samples.length < nSamp; i--) {
+            last += view.getInt16(wOff + (1-i)*2, false);
+            samples.push(last);
+          }
+          break;
+        case 3: // 1 x 32-bit
+          last += word;
+          samples.push(last);
+          break;
+      }
+    }
+  }
+  return samples;
+}
+
+function decodeSteim2(view, offset, dataLen, nSamp) {
+  const samples = [];
+  const nFrames = Math.floor(dataLen / 64);
+  let last = 0;
+  let first = true;
+
+  for (let f = 0; f < nFrames && samples.length < nSamp; f++) {
+    const fOff = offset + f * 64;
+    const ctrl = view.getUint32(fOff, false);
+
+    for (let w = 1; w < 16 && samples.length < nSamp; w++) {
+      const code = (ctrl >>> (30 - w*2)) & 0x3;
+      const wOff = fOff + w * 4;
+      const word = view.getUint32(wOff, false);
+
+      if (f === 0 && w === 1) {
+        last = view.getInt32(wOff, false);
+        if (first) { samples.push(last); first = false; }
+        continue;
+      }
+      if (f === 0 && w === 2) continue;
+
+      if (code === 0) continue;
+      if (code === 1) { // Steim-1 fallback 4x8
+        for (let i = 3; i >= 0 && samples.length < nSamp; i--) {
+          const b = (word >> (i*8)) & 0xFF;
+          last += (b > 127 ? b - 256 : b);
+          samples.push(last);
+        }
+        continue;
+      }
+
+      // code 2 or 3: Steim-2 compressed
+      const dnib = (word >>> 30) & 0x3;
+      const body = word & 0x3FFFFFFF;
+
+      let diffs = [];
+      if (code === 2) {
+        switch (dnib) {
+          case 1: diffs = [signExt(body, 30)]; break;
+          case 2: diffs = [signExt(body>>15,15), signExt(body&0x7FFF,15)]; break;
+          case 3: diffs = [signExt(body>>20,10), signExt((body>>10)&0x3FF,10), signExt(body&0x3FF,10)]; break;
+        }
+      } else { // code 3
+        switch (dnib) {
+          case 0: diffs = [signExt(body>>24,6),signExt((body>>18)&0x3F,6),signExt((body>>12)&0x3F,6),signExt((body>>6)&0x3F,6),signExt(body&0x3F,6)]; break;
+          case 1: diffs = [signExt(body>>25,5),signExt((body>>20)&0x1F,5),signExt((body>>15)&0x1F,5),signExt((body>>10)&0x1F,5),signExt((body>>5)&0x1F,5),signExt(body&0x1F,5)]; break;
+          case 2: diffs = Array.from({length:7}, (_,i)=>signExt((body>>(27-i*4))&0xF,4)); break;
+          case 3: diffs = Array.from({length:7}, (_,i)=>signExt((body>>(27-i*4))&0xF,4)); break;
+        }
+      }
+
+      for (const d of diffs) {
+        if (samples.length >= nSamp) break;
+        last += d;
+        samples.push(last);
+      }
+    }
+  }
+  return samples;
+}
+
+function signExt(val, bits) {
+  const mask = 1 << (bits - 1);
+  return (val & mask) ? val - (1 << bits) : val;
+}
+
+// ─── Raw Header Dump ─────────────────────────────────────────────────────────
+function dumpRawHeader() {
+  if (!rawBytes) return;
+  const bytes = new Uint8Array(rawBytes);
+  const view = new DataView(rawBytes);
+  const lines = [];
+
+  lines.push(`Total bytes: ${rawBytes.byteLength}`);
+  lines.push(`First 48 bytes (hex):`);
+  let hex = '';
+  for (let i = 0; i < Math.min(48, bytes.length); i++) {
+    hex += bytes[i].toString(16).padStart(2,'0') + ' ';
+    if ((i+1) % 16 === 0) { lines.push(hex.trim()); hex = ''; }
+  }
+  if (hex) lines.push(hex.trim());
+
+  lines.push(`Seq: "${readASCII(bytes,0,6)}"`);
+  lines.push(`Sta: "${readASCII(bytes,8,5).trim()}"`);
+  lines.push(`Loc: "${readASCII(bytes,13,2).trim()}"`);
+  lines.push(`Cha: "${readASCII(bytes,15,3).trim()}"`);
+  lines.push(`Net: "${readASCII(bytes,18,2).trim()}"`);
+  lines.push(`Year: ${view.getUint16(20,false)}`);
+  lines.push(`DOY: ${view.getUint16(22,false)}`);
+  lines.push(`Time: ${bytes[24]}:${bytes[25]}:${bytes[26]}.${view.getUint16(28,false)}`);
+  lines.push(`nSamp: ${view.getUint16(30,false)}`);
+  lines.push(`SR factor: ${view.getInt16(32,false)}`);
+  lines.push(`SR mult: ${view.getInt16(34,false)}`);
+  lines.push(`nBlk: ${bytes[39]}`);
+  lines.push(`dataOff: ${view.getUint16(44,false)}`);
+  lines.push(`blk1Off: ${view.getUint16(46,false)}`);
+
+  // Blockette 1000
+  const b1 = view.getUint16(46,false);
+  if (b1 > 0 && b1 + 8 <= rawBytes.byteLength) {
+    lines.push(`Blk1000 type: ${view.getUint16(b1,false)}`);
+    lines.push(`Blk1000 enc: ${bytes[b1+4]}`);
+    lines.push(`Blk1000 recLenExp: ${bytes[b1+6]} → ${1<<bytes[b1+6]} bytes`);
+  }
+
+  document.getElementById('rawDumpContent').textContent = lines.join('\n');
+  document.getElementById('rawDump').style.display = 'block';
+  log('Header dump shown above', 'info');
+}
+
+// ─── Spectrogram ─────────────────────────────────────────────────────────────
+function renderSpectrogram() {
+  const canvas = document.getElementById('specCanvas');
+  const wrap = document.getElementById('mainWrap');
+  const W = wrap.clientWidth || 600;
+  const H = 300;
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = W + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#010409';
+  ctx.fillRect(0, 0, W, H);
+
+  const fMax = parseFloat(document.getElementById('freqMax').value);
+  const dbMin = parseFloat(document.getElementById('dbMin').value);
+  const dbMax = parseFloat(document.getElementById('dbMax').value);
+  const cmap = document.getElementById('cmapSel').value;
+
+  const n = allSamples.length;
+  const vs = Math.floor(viewStart * n);
+  const ve = Math.floor(viewEnd * n);
+  const seg = allSamples.slice(vs, ve);
+
+  const fftSize = 512;
+  const hop = Math.max(1, Math.floor(seg.length / W));
+  const cols = Math.floor((seg.length - fftSize) / hop);
+  if (cols < 1) return;
+
+  const freqBins = fftSize / 2;
+  const nyq = sampleRate / 2;
+  const maxBin = Math.floor((fMax / nyq) * freqBins);
+
+  const imgData = ctx.createImageData(W, H);
+
+  for (let col = 0; col < Math.min(cols, W); col++) {
+    const start = col * hop;
+    const frame = seg.slice(start, start + fftSize);
+    if (frame.length < fftSize) break;
+
+    // Apply Hann window
+    const windowed = new Float32Array(fftSize);
+    for (let i = 0; i < fftSize; i++) {
+      windowed[i] = frame[i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / (fftSize - 1)));
+    }
+
+    const spectrum = fft(windowed);
+
+    for (let row = 0; row < H; row++) {
+      const bin = Math.floor((1 - row / H) * maxBin);
+      if (bin >= freqBins) continue;
+      const mag = spectrum[bin];
+      const db = 20 * Math.log10(mag + 1e-12);
+      const norm = Math.max(0, Math.min(1, (db - dbMin) / (dbMax - dbMin)));
+      const [r, g, b] = colormap(norm, cmap);
+      const idx = (row * W + col) * 4;
+      imgData.data[idx]   = r;
+      imgData.data[idx+1] = g;
+      imgData.data[idx+2] = b;
+      imgData.data[idx+3] = 255;
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+  specImageData = imgData;
+
+  drawYAxis(H, fMax);
+  drawXAxis(W);
+  drawColorbar();
+  if (showWaveform) renderWaveform();
+}
+
+// ─── FFT (Cooley-Tukey) ───────────────────────────────────────────────────────
+function fft(signal) {
+  const N = signal.length;
+  const re = new Float32Array(N);
+  const im = new Float32Array(N);
+  for (let i = 0; i < N; i++) re[i] = signal[i];
+
+  // Bit-reversal
+  let j = 0;
+  for (let i = 1; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const uRe = re[i+k], uIm = im[i+k];
+        const vRe = re[i+k+len/2]*curRe - im[i+k+len/2]*curIm;
+        const vIm = re[i+k+len/2]*curIm + im[i+k+len/2]*curRe;
+        re[i+k] = uRe+vRe; im[i+k] = uIm+vIm;
+        re[i+k+len/2] = uRe-vRe; im[i+k+len/2] = uIm-vIm;
+        const newRe = curRe*wRe - curIm*wIm;
+        curIm = curRe*wIm + curIm*wRe;
+        curRe = newRe;
+      }
+    }
+  }
+
+  const mag = new Float32Array(N/2);
+  for (let i = 0; i < N/2; i++) mag[i] = Math.sqrt(re[i]*re[i] + im[i]*im[i]) / N;
+  return mag;
+}
+
+// ─── Waveform ─────────────────────────────────────────────────────────────────
+function renderWaveform() {
+  const canvas = document.getElementById('waveCanvas');
+  const wrap = document.getElementById('mainWrap');
+  const W = wrap.clientWidth || 600;
+  canvas.width = W; canvas.height = 80;
+  canvas.style.width = W + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#010409';
+  ctx.fillRect(0, 0, W, 80);
+
+  const n = allSamples.length;
+  const vs = Math.floor(viewStart * n);
+  const ve = Math.floor(viewEnd * n);
+  const seg = allSamples.slice(vs, ve);
+
+  let mn = Infinity, mx = -Infinity;
+  for (const s of seg) { if (s < mn) mn = s; if (s > mx) mx = s; }
+  const range = mx - mn || 1;
+
+  ctx.strokeStyle = '#58a6ff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const step = Math.max(1, Math.floor(seg.length / W));
+  for (let x = 0; x < W; x++) {
+    const i = Math.floor(x * seg.length / W);
+    const y = 80 - ((seg[i] - mn) / range) * 70 - 5;
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Y axis
+  const yCtx = document.getElementById('waveYax').getContext('2d');
+  document.getElementById('waveYax').height = 80;
+  yCtx.fillStyle = '#0d1117';
+  yCtx.fillRect(0, 0, 38, 80);
+  yCtx.fillStyle = '#8b949e';
+  yCtx.font = '9px monospace';
+  yCtx.textAlign = 'right';
+  yCtx.fillText(fmtAmp(mx), 36, 12);
+  yCtx.fillText(fmtAmp((mx+mn)/2), 36, 44);
+  yCtx.fillText(fmtAmp(mn), 36, 76);
+}
+
+function fmtAmp(v) {
+  if (Math.abs(v) > 1e6) return (v/1e6).toFixed(1)+'M';
+  if (Math.abs(v) > 1e3) return (v/1e3).toFixed(1)+'k';
+  return v.toFixed(0);
+}
+
+// ─── Axes ─────────────────────────────────────────────────────────────────────
+function drawYAxis(H, fMax) {
+  const c = document.getElementById('yaxCanvas');
+  c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, 38, H);
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right';
+  const ticks = 6;
+  for (let i = 0; i <= ticks; i++) {
+    const f = fMax * (1 - i / ticks);
+    const y = Math.round(i * H / ticks);
+    ctx.fillText(f.toFixed(f < 10 ? 1 : 0), 36, y + 4);
+  }
+  ctx.save();
+  ctx.translate(10, H/2);
+  ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#58a6ff';
+  ctx.font = '9px sans-serif';
+  ctx.fillText('Freq (Hz)', 0, 0);
+  ctx.restore();
+}
+
+function drawXAxis(W) {
+  const c = document.getElementById('xaxCanvas');
+  c.width = W;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, 18);
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+
+  const n = allSamples.length;
+  const durSec = n / sampleRate;
+  const vs = viewStart * durSec;
+  const ve = viewEnd * durSec;
+  const ticks = 6;
+  for (let i = 0; i <= ticks; i++) {
+    const t = vs + (ve - vs) * i / ticks;
+    const epoch = startEpoch + t * 1000;
+    const x = Math.round(i * W / ticks);
+    const d = new Date(epoch);
+    const label = d.toISOString().slice(11, 19);
+    ctx.fillText(label, x, 12);
+  }
+}
+
+// ─── Colormap ─────────────────────────────────────────────────────────────────
+function colormap(t, name) {
+  t = Math.max(0, Math.min(1, t));
+  switch (name) {
+    case 'plasma': return plasmaColor(t);
+    case 'inferno': return infernoColor(t);
+    case 'jet': return jetColor(t);
+    case 'gray': return [t*255, t*255, t*255];
+    default: return viridisColor(t);
+  }
+}
+
+function viridisColor(t) {
+  const r = Math.round(Math.max(0,Math.min(255, 68 + t*(59-68) + t*t*(253-59-68+68))));
+  const stops = [[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]];
+  return interpStops(stops, t);
+}
+function plasmaColor(t) {
+  return interpStops([[13,8,135],[126,3,168],[204,71,120],[248,149,64],[240,249,33]], t);
+}
+function infernoColor(t) {
+  return interpStops([[0,0,4],[87,16,110],[188,55,84],[249,142,9],[252,255,164]], t);
+}
+function jetColor(t) {
+  return interpStops([[0,0,128],[0,128,255],[0,255,0],[255,255,0],[255,0,0]], t);
+}
+function interpStops(stops, t) {
+  const n = stops.length - 1;
+  const i = Math.min(n-1, Math.floor(t * n));
+  const f = t * n - i;
+  return stops[i].map((v,k) => Math.round(v + f*(stops[i+1][k]-v)));
+}
+
+function drawColorbar() {
+  const c = document.getElementById('cbar');
+  const ctx = c.getContext('2d');
+  const W = c.width; const H = c.height;
+  const cmap = document.getElementById('cmapSel').value;
+  for (let x = 0; x < W; x++) {
+    const [r,g,b] = colormap(x/W, cmap);
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    ctx.fillRect(x, 0, 1, H);
+  }
+  const dbMin = document.getElementById('dbMin').value;
+  const dbMax = document.getElementById('dbMax').value;
+  document.getElementById('cbarMin').textContent = dbMin + ' dB';
+  document.getElementById('cbarMax').textContent = dbMax + ' dB';
+}
+
+// ─── Zoom ─────────────────────────────────────────────────────────────────────
+function toggleZoom() {
+  zoomMode = !zoomMode;
+  document.getElementById('zoomBtn').classList.toggle('active', zoomMode);
+  document.getElementById('mainWrap').style.cursor = zoomMode ? 'crosshair' : 'default';
+}
+
+function resetView() {
+  viewStart = 0; viewEnd = 1;
+  if (allSamples.length) renderSpectrogram();
+}
+
+function setupZoomInteraction() {
+  const wrap = document.getElementById('mainWrap');
+  let dragStart = null;
+  const rect = () => wrap.getBoundingClientRect();
+  const zr = document.getElementById('zoomRect');
+
+  const getX = e => (e.touches ? e.touches[0].clientX : e.clientX) - rect().left;
+
+  wrap.addEventListener('mousedown', e => { if (zoomMode) { dragStart = getX(e); zr.style.display='block'; } });
+  wrap.addEventListener('touchstart', e => { if (zoomMode) { dragStart = getX(e); zr.style.display='block'; } });
+
+  wrap.addEventListener('mousemove', e => {
+    if (!zoomMode || dragStart === null) return;
+    const x = getX(e);
+    const l = Math.min(dragStart, x), w = Math.abs(x - dragStart);
+    zr.style.left = l+'px'; zr.style.width = w+'px'; zr.style.top='0'; zr.style.height='100%';
+  });
+
+  wrap.addEventListener('mouseup', e => {
+    if (!zoomMode || dragStart === null) return;
+    const x = getX(e);
+    const W = wrap.clientWidth;
+    const a = Math.min(dragStart,x)/W, b = Math.max(dragStart,x)/W;
+    if (b - a > 0.01) {
+      viewStart = viewStart + a*(viewEnd-viewStart);
+      viewEnd = viewStart + (b-a)*(viewEnd-viewStart) + a*(viewEnd-viewStart);
+      // recalc properly
+      const range = viewEnd - viewStart;
+      const oldVS = viewStart - a*(viewEnd-viewStart);
+      viewStart = oldVS + a*(viewEnd-oldVS);
+      viewEnd = viewStart + (b-a)*(viewEnd-oldVS);
+      renderSpectrogram();
+    }
+    dragStart = null; zr.style.display='none';
+    zoomMode = false;
+    document.getElementById('zoomBtn').classList.remove('active');
+  });
+  wrap.addEventListener('touchend', e => wrap.dispatchEvent(new MouseEvent('mouseup', {clientX: e.changedTouches[0].clientX})));
+}
+
+// ─── Waveform toggle ─────────────────────────────────────────────────────────
+function toggleWaveform() {
+  showWaveform = !showWaveform;
+  document.getElementById('waveSection').style.display = showWaveform ? 'block' : 'none';
+  document.getElementById('waveBtn').classList.toggle('active', showWaveform);
+  if (showWaveform && allSamples.length) renderWaveform();
+}
+
+// ─── Status ───────────────────────────────────────────────────────────────────
+function setStatus(msg, dot, badge) {
+  document.getElementById('sTxt').textContent = msg;
+  const d = document.getElementById('sDot');
+  d.className = 'dot ' + dot;
+  const b = document.getElementById('dataBadge');
+  b.className = 'badge ' + (badge === 'real' ? 'real' : badge === 'fetching' ? 'fetching' : 'sim');
+  b.textContent = badge === 'real' ? 'REAL DATA' : badge === 'fetching' ? 'FETCHING…' : 'NO DATA';
+}
+</script>
+</body>
+</html>
